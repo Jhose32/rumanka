@@ -1,5 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../viewmodel/auth_viewmodel.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,22 +17,65 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  String? _loginError;
+  Timer? _errorTimer;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _errorTimer?.cancel();
     super.dispose();
   }
 
-  void _onIniciarSesion() {
+  void _mostrarError(String mensaje) {
+    _errorTimer?.cancel();
+    setState(() => _loginError = mensaje);
+    _errorTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _loginError = null);
+    });
+  }
+
+  Future<void> _onIniciarSesion() async {
+    setState(() => _loginError = null);
     if (_formKey.currentState!.validate()) {
-      // TODO: lógica de login con email/contraseña
+      final viewModel = context.read<AuthViewModel>();
+      final success = await viewModel.loginWithEmail(
+        _emailController.text,
+        _passwordController.text,
+      );
+      if (!success && mounted) {
+        _mostrarError(viewModel.errorMessage);
+      }
     }
+  }
+
+  Future<void> _onLoginGoogle() async {
+    final viewModel = context.read<AuthViewModel>();
+    final success = await viewModel.loginWithGoogle();
+    if (!success && mounted && viewModel.errorMessage.isNotEmpty) {
+      _mostrarError(viewModel.errorMessage);
+    }
+  }
+
+  void _irARegistro() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const RegisterScreen()),
+    ).then((_) {
+      // Al volver, limpia los campos y el error
+      _emailController.clear();
+      _passwordController.clear();
+      _errorTimer?.cancel();
+      if (mounted) setState(() => _loginError = null);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final isLoading =
+        context.watch<AuthViewModel>().status == AuthStatus.loading;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -117,11 +164,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 : Icons.visibility,
                             color: AppColors.textHint,
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
-                          },
+                          onPressed: () =>
+                              setState(() => _obscurePassword = !_obscurePassword),
                         ),
                       ),
                       validator: (value) {
@@ -133,7 +177,49 @@ class _LoginScreenState extends State<LoginScreen> {
                         }
                         return null;
                       },
+                      onChanged: (_) {
+                        if (_loginError != null) {
+                          _errorTimer?.cancel();
+                          setState(() => _loginError = null);
+                        }
+                      },
                     ),
+
+                    // Mensaje de error temporal
+                    if (_loginError != null) ...[
+                      const SizedBox(height: 10),
+                      AnimatedOpacity(
+                        opacity: _loginError != null ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 300),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEAF4EF),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: AppColors.primary.withOpacity(0.4)),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline,
+                                  size: 16, color: AppColors.primaryDark),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _loginError!,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.primaryDark,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
 
@@ -141,17 +227,24 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 // Botón Inicia Sesión
                 ElevatedButton(
-                  onPressed: _onIniciarSesion,
-                  child: const Text('INICIA SESIÓN'),
+                  onPressed: isLoading ? null : _onIniciarSesion,
+                  child: isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text('INICIA SESIÓN'),
                 ),
 
                 const SizedBox(height: 16),
 
                 // Link Regístrate
                 TextButton(
-                  onPressed: () {
-                    // TODO: navegar a registro
-                  },
+                  onPressed: isLoading ? null : _irARegistro,
                   child: const Text(
                     'Regístrate',
                     style: TextStyle(
@@ -164,11 +257,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 20),
 
                 // Divisor
-                Row(
+                const Row(
                   children: [
-                    const Expanded(child: Divider(color: AppColors.border)),
+                    Expanded(child: Divider(color: AppColors.border)),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: EdgeInsets.symmetric(horizontal: 12),
                       child: Text(
                         'o continúa con',
                         style: TextStyle(
@@ -177,7 +270,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-                    const Expanded(child: Divider(color: AppColors.border)),
+                    Expanded(child: Divider(color: AppColors.border)),
                   ],
                 ),
 
@@ -185,9 +278,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 // Botón Google
                 InkWell(
-                  onTap: () {
-                    // TODO: login con Google
-                  },
+                  onTap: isLoading ? null : _onLoginGoogle,
                   borderRadius: BorderRadius.circular(12),
                   child: Container(
                     padding: const EdgeInsets.symmetric(

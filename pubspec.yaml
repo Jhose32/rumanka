@@ -50,6 +50,10 @@ dependencies:
   font_awesome_flutter: ^10.8.0
   sign_in_button: ^4.1.0
 
+  # Mapa
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
